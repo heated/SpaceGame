@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang='en'>
+	<body bgcolor='black' style = 'overflow:hidden'>
+		<canvas id='game' tabindex='1' width='640' height='400' style = 'position: absolute; top: 0; left: 0'/>
+		<script>
+
+function init_sprites() {
+	pcimg = srcimg('MqaLKP2')
+	meteorimg = srcimg('ChDuBLO')
+	bigmeteorimg = srcimg('tIyQv1V')
+	shipimg = srcimg('SbyapXR')
+	bigshipimg = srcimg('nzSFj9X')
+	armorimg = srcimg('pXRIDRB')
+}
+
+function init_constants() {
+	playersize = 25
+	mobsize = 25
+	playerspd = 4
+}
+
+function init_entities() {
+	mobs = []
+	shots = []
+	mobshots = []
+	stars = []
+	particles = []
+}
+
+function init_timers() {
+	spawntime = 60
+	shottime = 10
+	mobshottime = 60
+	spawner = 0
+	shooter = 0
+	stargen = 0
+
+	//TODO: levels
+	lvltime = 1800
+	sublvltime = 360
+}
+
+function init_misc() {
+	movement = [false, false, false, false, false] //w, a, s, d, l
+	player = [320, 350] //x, y
+	killcount = 0
+	highscore = 0
+	armor = 3
+	paused = false
+}
+
+function initialize() {
+	canvas = document.getElementById('game')
+	ctx = canvas.getContext('2d')
+
+	init_sprites()
+	init_constants()
+	init_entities()
+	init_timers()
+	init_misc()
+
+	canvas.addEventListener('keydown', handleKeys, true)
+	canvas.addEventListener('keyup', handleKeys, true)
+
+	window.requestAnimFrame(game_loop)
+}
+
+function game_loop() {
+	if(paused)
+		return
+
+	window.requestAnimFrame(game_loop)
+
+	incGame()
+	renderBackground()
+	renderEntities()
+	renderText()
+}
+
+function renderText() {
+	ctx.fillStyle = 'white'
+	ctx.textAlign = 'left'
+	ctx.fillText('kills: ' + killcount, 5, 13)
+	ctx.fillText('armor: ', 5, canvas.height - 6)
+
+	ctx.textAlign = 'right'
+	ctx.fillText('highscore: ' + highscore, canvas.width - 5, 13)
+
+	ctx.fillStyle = 'grey'
+	a = armor
+	while(a--)
+		dispImg(armorimg, [42 + 15 * a, canvas.height - 10])
+}
+
+function renderBackground() {
+	ctx.clearRect(0, 0, canvas.width, canvas.height) //clear canvas
+	
+	ctx.fillStyle = 'white'
+
+	a = stars.length
+	while(a--) rect(stars[a], 1, 2)
+}
+
+function renderEntities() {
+	ctx.fillStyle = 'grey'
+	a = particles.length
+	while(a--)
+		rect(particles[a], 2, 2) //draw particles
+
+	ctx.fillStyle = 'white'
+	a = shots.length
+	while(a--)
+		rect(shots[a], 3, 6) //draw player bullets
+
+	ctx.fillStyle = 'red'
+	a = mobshots.length
+	while(a--)
+		rect(mobshots[a], 3, 6) //draw mob bullets
+
+	a = mobs.length
+	while(a--)
+		dispImg(shipimg, mobs[a]) //draw mobs
+
+	dispImg(pcimg, player) //draw player
+}
+
+function rect(pos, width, height) {
+	ctx.fillRect( (pos[0] - width / 2)|0, 
+				  (pos[1] - height / 2)|0, 
+				  width|0, 
+				  height|0 )
+}
+
+function dispImg(img, pos) {
+	center_x = pos[0] - img.width / 2
+	center_y = pos[1] - img.height / 2
+	ctx.drawImage(img, (center_x|0) + .5, (center_y|0) + .5)
+}
+
+function update_player_pos() {
+	if (movement[0]) player[0] -= playerspd
+	if (movement[1]) player[1] -= playerspd
+	if (movement[2]) player[0] += playerspd
+	if (movement[3]) player[1] += playerspd
+	if (player[0] > canvas.width - playersize / 2) player[0] = canvas.width - playersize / 2
+	if (player[1] > canvas.height - playersize / 2) player[1] = canvas.height - playersize / 2
+	if (player[0] < playersize / 2) player[0] = playersize / 2
+	if (player[1] < playersize / 2) player[1] = playersize / 2
+}
+
+function incGame() {
+	//handle movement first, then firing, then damage
+	update_player_pos()
+
+	a = stars.length
+	while(a--) {
+		star = stars[a]
+		update_pos(star)
+		if(!within_bounds(star, 5))	kill(stars, a)
+	}
+
+	a = particles.length
+	while(a--) { //particles explode
+		particle = particles[a]
+		update_pos(particle)
+		d = particle[4]--
+		if(!within_bounds(particle, 10) || d < 0) kill(particles, a)
+	}
+
+	a = mobs.length
+	while(a--) { //mobs act
+		mob = mobs[a]
+		update_pos(mob)
+		if(within_bounds(mob, mobsize)) {
+			if(collision(mob, player, (mobsize + playersize) / 2)) { //collide
+				explode(mob, 100)
+				kill(mobs, a)
+				hitplayer()
+				break
+			} else {
+				mob[4]--
+				if (mob[4] <= 0) {
+					mob[4] = mobshottime
+					mobshots.push([mob[0], mob[1] + 10, 0, 6]) //x, y, xspd, yspd
+				}
+			}
+		} else kill(mobs, a)
+
+		if (mobs.length == 0) break
+	}
+
+	a = shots.length
+	while(a--) { //shots move, hit
+		shot = shots[a]
+		update_pos(shot)
+		if(within_bounds(shot, 10)) {
+			//KILL MOBS
+			d = mobs.length
+			while(d--){ //shots move, hit
+				if(collision(shot, mobs[d], mobsize / 2)) { //collide
+					explode(mobs[d], 50)
+					kill(shots, a)
+					kill(mobs, d)
+					killcount++
+					if (killcount > highscore) highscore = killcount
+					break
+				}
+			}
+		} else kill(shots, a)
+	}
+
+	a = mobshots.length
+	while(a--) { //shots move, hit
+		mob_shot = mobshots[a]
+		update_pos(mob_shot)
+		if(within_bounds(mob_shot, 10)) {
+			//KILL player
+			if(collision(mob_shot, player, playersize / 2)) { //collide
+				explode(mobshots, 100)
+				kill(mobshots, a)
+				hitplayer()
+				break
+			}
+		} else kill(mobshots, a)
+
+		if (mobshots.length == 0) break
+	}
+
+	increment_spawning()
+}
+
+// various spawn timers and mechanics
+function increment_spawning() {
+	spawner--
+	if (spawner <= 0) {
+		if (killcount >= 40)
+			spawner = spawntime / 4
+		else if (killcount >= 15)
+			spawner = spawntime / 2
+		else
+			spawner = spawntime
+
+		x = Math.random() * (canvas.width - mobsize) + mobsize / 2
+		y = -mobsize / 2
+		x_speed = .6 * Math.random() - .3
+		x_speed *= (killcount >= 40) ? 2 : 1
+		y_speed = (killcount >= 40) ? 3 : 1.5
+		shot_offset = 30 + Math.random() * 60
+		shot_offset *= (killcount >= 40) ? .5 : 1
+
+		mobs.push([x, y, x_speed, y_speed, shot_offset])
+	}
+
+	shooter--
+	if (shooter <= 0 && movement[4]) {
+		shooter = shottime
+		x = player[0]
+		y = player[1]
+		side_length = playersize / 2
+		shoty = y - side_length
+		left = x - side_length
+		right = x + side_length
+
+		if (killcount >= 70) {
+			a = 5
+			while(a--)
+				shots.push([x, shoty, -2 + 1 * a, -8])
+		} else if (killcount >= 30) {
+			shots.push([left, y, -1, -8])
+			shots.push([x, shoty, 0, -8])
+			shots.push([right, y, 1, -8])
+		} else if (killcount >= 10) {
+			shots.push([left, y, 0, -8])
+			shots.push([right, y, 0, -8])
+		} else {
+			shots.push([x, shoty, 0, -8]) //x, y, xspd, yspd
+		}
+	}
+
+	stargen--
+	if (stargen <= 0) {
+		stargen = 2
+		stars.push([Math.random() * canvas.width, -1, 0, 5]) //x, y, xspd, yspd
+	}
+}
+
+function update_pos(entity) {
+	entity[0] += entity[2] // x
+	entity[1] += entity[3] // y
+}
+
+// lightly kill entity so that reverse iterating is still okay
+function kill(array, index) {
+	array[index] = array[array.length - 1]
+	array.pop()
+}
+
+function within_bounds(pos, tolerance) {
+	x = pos[0]
+	y = pos[1]
+	return x > -tolerance &&
+	y > -tolerance &&
+	x < canvas.width + tolerance &&
+	y < canvas.height + tolerance
+}
+
+function explode(pos, power) {
+	var e = power
+	while(e--) {
+		var angle = Math.random() * Math.PI * 2
+		var blast = Math.random() * Math.sqrt(power) / 4
+		particles.push([pos[0], pos[1], Math.cos(angle) * blast, Math.sin(angle) * blast, Math.random() * 30])
+	}
+}
+
+function hitplayer() {
+	explode([27 + 15 * armor, canvas.height - 10], 50)
+	if (--armor == 0) restart()
+}
+
+function restart() {
+	explode(player, 1000)
+	killcount = 0
+	player = [320, 350]
+	mobs = []
+	shots = []
+	mobshots = []
+	armor = 3
+}
+
+function collision(entity1, entity2, dist) {
+	x1 = entity1[0]
+	y1 = entity1[1]
+	x2 = entity2[0]
+	y2 = entity2[1]
+	return ( Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2) ) < Math.pow(dist, 2)
+}
+
+function handleKeys(event) { //user key input
+	var a = -1
+	switch(event.keyCode) {
+		case 37:
+		case 65: a = 0; break //a
+		case 38:
+		case 87: a = 1; break //w
+		case 39:
+		case 68: a = 2; break //d
+		case 40:
+		case 83: a = 3; break //s
+		case 32:
+		case 76: a = 4; break //l
+	}
+	var down = event.type == 'keydown'
+	if(a >= 0) {
+		movement[a] = down ? true : false
+	    event.preventDefault()
+	    event.stopPropagation()
+	}
+
+	if(event.keyCode == 80 && down) toggle_pause() //p
+
+    event.preventDefault();
+    event.stopPropagation();
+}
+
+function toggle_pause() {
+	paused = !paused
+	if(paused) {
+		ctx.fillStyle = 'white'
+		ctx.fillText('-paused-', canvas.width / 2 + 20, canvas.height / 2 + 5)
+	} else window.requestAnimFrame(game_loop)
+}
+
+function srcimg(src) { //get images easier
+	img = document.createElement('img')
+	img.src = 'http://i.imgur.com/' + src + '.png'
+	return img
+}
+
+window.requestAnimFrame = (function() { //render cycle
+	return window.requestAnimationFrame || 
+	window.webkitRequestAnimationFrame || 
+	window.mozRequestAnimationFrame || 
+	window.oRequestAnimationFrame || 
+	window.msRequestAnimationFrame || 
+	function(callback, element){
+		window.setTimeout(callback, 1000 / 60)
+	}
+})()
+
+initialize()
+
+		</script>
+	</body>
+</html>
