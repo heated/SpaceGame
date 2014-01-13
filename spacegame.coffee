@@ -1,5 +1,7 @@
 class BaseEntity
   constructor: ->
+    @game = window.Game
+    @container = @constructor.container ?= []
     @index = @container.length
     @container.push(this)
     @mass ?= (@dims[0] * @dims[1] / 4) | 0
@@ -28,8 +30,8 @@ class BaseEntity
     tolerance = @dims[0]
     x < -tolerance ||
     y < -tolerance ||
-    x > canvas.width + tolerance ||
-    y > canvas.height + tolerance
+    x > @game.width + tolerance ||
+    y > @game.height + tolerance
 
   collides: (entity) ->
     [x1, y1] = @pos
@@ -43,10 +45,10 @@ class BaseEntity
   rect: ->
     [x, y] = @pos
     [dx, dy] = @dims
-    ctx.fillRect( (x - dx / 2)|0, 
-                  (y - dy / 2)|0, 
-                            dx|0, 
-                            dy|0 )
+    @game.ctx.fillRect( (x - dx / 2)|0, 
+                        (y - dy / 2)|0, 
+                                  dx|0, 
+                                  dy|0 )
 
   act: ->
 
@@ -60,9 +62,9 @@ class BaseEntity
       new Particle([pos...], [xspeed, yspeed])
 
 class Particle extends BaseEntity
+  @container = []
   constructor: (@pos, @vector) ->
     @dims = [2, 2]
-    @container = particles
     @mass = 0
     super
 
@@ -70,11 +72,11 @@ class Particle extends BaseEntity
     @destroy() if Math.random() < .1
 
 class Star extends BaseEntity
+  @container = []
   constructor: (xpos) ->
     @pos = [xpos, -1]
-    @vector = [0, 5]
-    @dims = [1, 2]
-    @container = stars
+    @vector = [0, 8]
+    @dims = [1, 4]
     @mass = 0
     super
 
@@ -104,11 +106,11 @@ class Shot extends Killable
     entity.hit()
 
 class Player_Shot extends Shot
+  @container = []
   constructor: (@pos, xspd) ->
     @vector = [xspd, -8]
-    @dims ?= [3, 6]
-    @container = player_attacks
-    @enemies = enemy_mobs
+    @dims ?= [3, 10]
+    @enemies = Enemy_Ship.container
     super
 
   damage: (entity) ->
@@ -116,14 +118,14 @@ class Player_Shot extends Shot
     @inc_score()
 
   inc_score: ->
-    killcount++
-    player.mass += 10
+    @game.killcount++
+    @game.player.mass += 10
 
 class Enemy_Shot extends Shot
+  @container = []
   constructor: (@pos, @vector) ->
-    @dims = [3, 6]
-    @container = enemy_attacks
-    @enemies = [player]
+    @dims = [3, 10]
+    @enemies = Player.container
     super
 
   damage: (entity) ->
@@ -131,10 +133,10 @@ class Enemy_Shot extends Shot
     @explode(@pos, 50)
 
 class Enemy_Ship extends Shot
+  @container = []
   constructor: (@pos, @vector, @cooldown) ->
     @dims = [25, 25]
-    @container = enemy_mobs
-    @enemies = [player]
+    @enemies = Player.container
     super
 
   act: ->
@@ -147,14 +149,14 @@ class Enemy_Ship extends Shot
     new_shot.pos[1] += @size / 2
 
   render: ->
-    dispImg(shipimg, @pos)
+    @game.dispImg(@game.shipimg, @pos)
 
 class Player extends Killable
+  @container = []
   constructor: ->
     @dims ?= [25, 25]
     @pos ?= [320, 350]
-    @container = allies
-    @enemies = enemy_mobs
+    @enemies = Enemy_Ship.container
     @mass ?= 500
     @max_health ?= 3
     @cooldown = 0
@@ -162,13 +164,13 @@ class Player extends Killable
 
   update_pos: ->
     [x, y] = @pos
-    dirs = ((key ? 1 : 0) for key in keypress)
+    dirs = ((key ? 1 : 0) for key in @game.keypress)
 
     x += 4 * (dirs[2] - dirs[0])
     y += 4 * (dirs[3] - dirs[1])
 
-    x = @buffer(x, @size / 2, canvas.width - @size / 2)
-    y = @buffer(y, @size / 2, canvas.height - @size / 2)
+    x = @buffer(x, @size / 2, @game.width - @size / 2)
+    y = @buffer(y, @size / 2, @game.height - @size / 2)
 
     @pos = [x, y]
     @render()
@@ -179,10 +181,10 @@ class Player extends Killable
     index
 
   act: ->
-    @spawn_shot() if @cooldown-- <= 0 && keypress[4]
+    @spawn_shot() if @cooldown-- <= 0 && @game.keypress[4]
 
   spawn_shot: ->
-    @cooldown = 10
+    @cooldown = 30
 
     [x, y] = @pos
     side_length = @size / 2
@@ -190,6 +192,7 @@ class Player extends Killable
     left = x - side_length
     right = x + side_length
 
+    killcount = @game.killcount
     if killcount >= 70
       @cooldown = 0
       new Player_Shot([x, shoty], Math.random() - .5)
@@ -205,159 +208,159 @@ class Player extends Killable
       new Player_Shot([left, y], 0)
       new Player_Shot([right, y], 0)
     else
-      new Player_Shot([x, shoty], 0) # x, y, xspd
+      new Player_Shot([x, shoty], 0)
 
   render: ->
-    dispImg(pcimg, @pos)
+    @game.dispImg(@game.pcimg, @pos)
 
   destroy: ->
     super
-    restart()
+    @game.restart()
 
-  hit: ->  
-    @explode([27 + 15 * @health, canvas.height - 10], 50)
+  hit: ->
+    @explode([27 + 15 * @health, @game.height - 10], 50)
     super
 
-srcimg = (src) -> # get images more easily
-  img = document.createElement('img')
-  img.src = 'http://i.imgur.com/' + src + '.png'
-  img
+class Game
+  constructor: ->  
+    @canvas = document.getElementById('game')
+    @ctx = @canvas.getContext('2d')
+    @width = @canvas.width
+    @height = @canvas.height
 
-canvas = document.getElementById('game')
-ctx = canvas.getContext('2d')
+    @pcimg        = @srcimg('MqaLKP2')
+    @meteorimg    = @srcimg('ChDuBLO')
+    @bigmeteorimg = @srcimg('tIyQv1V')
+    @shipimg      = @srcimg('SbyapXR')
+    @bigshipimg   = @srcimg('nzSFj9X')
+    @armorimg     = @srcimg('pXRIDRB')
 
-pcimg = srcimg('MqaLKP2')
-meteorimg = srcimg('ChDuBLO')
-bigmeteorimg = srcimg('tIyQv1V')
-shipimg = srcimg('SbyapXR')
-bigshipimg = srcimg('nzSFj9X')
-armorimg = srcimg('pXRIDRB')
+    @all_entities = [['white', Star       ]
+                     [ 'grey', Particle   ]
+                     ['white', Player_Shot]
+                     [  'red', Enemy_Shot ]
+                     ['white', Enemy_Ship ]
+                     ['white', Player     ]]
 
-particles = []
-stars = []
+    @keypress = [false, false, false, false, false]
+    @paused = false
 
-player_attacks = []
-enemy_attacks = []
-enemy_mobs = []
-allies = []
-player = new Player()
-killcount = 0
+    @killcount = 0
+    @spawntime = 60
+    @spawner = 0
+    @stargen = 0
 
-all_entities = [['white', stars]
-                ['grey', particles]
-                ['white', player_attacks]
-                ['red', enemy_attacks]
-                ['white', enemy_mobs]
-                ['white', allies]]
+    @canvas.addEventListener('keydown', (e) => @handleKeys(e))
+    @canvas.addEventListener('keyup', (e) => @handleKeys(e))
 
-spawntime = 60
-spawner = 0
-stargen = 0
+    window.requestAnimFrame(=> @game_loop())
 
-keypress = [false, false, false, false, false] #w, a, s, d, l
-paused = false
+  srcimg: (src) -> # get images more easily
+    img = document.createElement('img')
+    img.src = 'http://i.imgur.com/' + src + '.png'
+    img
 
-game_loop = ->
-  return if paused
+  game_loop: ->
+    return if @paused
+    @player = new Player() if Player.container.length == 0
 
-  window.requestAnimFrame(game_loop)
+    window.requestAnimFrame(=> @game_loop())
 
-  increment_spawning()
+    @increment_spawning()
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  renderEntities()
-  renderText()
+    @ctx.clearRect(0, 0, @width, @height)
+    @renderEntities()
+    @renderText()
 
-renderText = ->
-  ctx.fillStyle = 'white'
-  ctx.textAlign = 'left'
-  ctx.fillText('kills: ' + killcount, 5, 13)
-  ctx.fillText('armor: ', 5, canvas.height - 6)
+  renderText: ->
+    @ctx.fillStyle = 'white'
+    @ctx.textAlign = 'left'
+    @ctx.fillText('kills: ' + @killcount, 5, 13)
+    @ctx.fillText('armor: ', 5, @height - 6)
 
-  ctx.fillStyle = 'grey'
-  a = player.health
-  while a-- > 0
-    dispImg(armorimg, [42 + 15 * a, canvas.height - 10])
+    @ctx.fillStyle = 'grey'
+    a = @player.health
+    while a-- > 0
+      @dispImg(@armorimg, [42 + 15 * a, @height - 10])
 
-renderEntities = ->
-  render_group(color, group) for [color, group] in all_entities
+  renderEntities: ->
+    @render_group(group) for group in @all_entities
 
-render_group = (color, group) ->
-  ctx.fillStyle = color
-  a = group.length
-  while a-- > 0
-    group[a].update()
+  render_group: ([color, base_class]) ->
+    @ctx.fillStyle = color
+    group = base_class.container
+    a = group.length
+    while a-- > 0
+      group[a].update()
 
-restart = ->
-  player_attacks = []
-  enemy_attacks = []
-  enemy_mobs = []
-  allies = []
-  player = new Player()
-  killcount = 0
+  restart: ->
+    Player_Shot.container = []
+    Enemy_Shot.container = []
+    Enemy_Ship.container = []
+    Player.container = []
+    @player = new Player()
+    @killcount = 0
 
-dispImg = (img, pos) ->
-  center_x = pos[0] - img.width / 2
-  center_y = pos[1] - img.height / 2
-  ctx.drawImage(img, (center_x|0) + .5, (center_y|0) + .5)
+  dispImg: (img, pos) ->
+    center_x = pos[0] - img.width / 2
+    center_y = pos[1] - img.height / 2
+    @ctx.drawImage(img, (center_x|0) + .5, (center_y|0) + .5)
 
-increment_spawning = ->
-  spawner--
-  if spawner <= 0
-    if killcount >= 40
-      spawner = spawntime / 4
-    else if killcount >= 15
-      spawner = spawntime / 2
-    else
-      spawner = spawntime
+  increment_spawning: ->
+    @spawner--
+    if @spawner <= 0
+      if @killcount >= 40
+        @spawner = @spawntime / 4
+      else if @killcount >= 15
+        @spawner = @spawntime / 2
+      else
+        @spawner = @spawntime
 
-    x = Math.random() * (canvas.width - 25) + 25 / 2
-    y = -25 / 2
-    x_speed = .6 * Math.random() - .3
-    y_speed = 1.5
-    shot_offset = 30 + Math.random() * 60
+      x = Math.random() * (@width - 25) + 25 / 2
+      y = -25 / 2
+      x_speed = .6 * Math.random() - .3
+      y_speed = 1.5
+      shot_offset = 30 + Math.random() * 60
 
-    new Enemy_Ship([x, y], [x_speed, y_speed], shot_offset)
+      new Enemy_Ship([x, y], [x_speed, y_speed], shot_offset)
 
-  if stargen-- < 0
-    stargen = 0
-    new Star(Math.random() * canvas.width) # x
+    new Star(Math.random() * @width)
 
-handleKeys = (event) ->
-  a = -1
-  switch event.keyCode
-    when 37, 65 then a = 0 # a
-    when 38, 87 then a = 1 # w
-    when 39, 68 then a = 2 # d
-    when 40, 83 then a = 3 # s
-    when 32, 76 then a = 4 # l
+  handleKeys: (event) ->
+    down = event.type == 'keydown'
 
-  down = event.type == 'keydown'
-  if a >= 0
-    keypress[a] = down ? true : false
+    a = -1
+    switch event.keyCode
+      when 37, 65 then a = 0 # a
+      when 38, 87 then a = 1 # w
+      when 39, 68 then a = 2 # d
+      when 40, 83 then a = 3 # s
+      when 32, 76 then a = 4 # l, space
 
-  if event.keyCode == 80 && down
-    toggle_pause() # p
+    if down
+      switch event.keyCode
+        when 80 then @toggle_pause() # p
+        when 82 then @restart() # r
 
-  event.preventDefault()
-  event.stopPropagation()
+    @keypress[a] = down if a >= 0
 
-toggle_pause = ->
-  paused = !paused
-  if paused
-    ctx.fillStyle = 'white'
-    ctx.fillText('-paused-', canvas.width / 2 + 20, canvas.height / 2 + 5)
-  else window.requestAnimFrame(game_loop)
+    event.preventDefault()
+    event.stopPropagation()
 
-window.requestAnimFrame = # render cycle
-  window.requestAnimationFrame || 
-  window.webkitRequestAnimationFrame || 
-  window.mozRequestAnimationFrame || 
-  window.oRequestAnimationFrame || 
-  window.msRequestAnimationFrame || 
-  (callback, element) -> window.setTimeout(callback, 1000 / 60)
+  toggle_pause: ->
+    @paused = !@paused
+    if @paused
+      @ctx.fillStyle = 'white'
+      @ctx.fillText('-paused-', @width / 2 + 20, @height / 2 + 5)
+    else window.requestAnimFrame(=> @game_loop())
 
-canvas.addEventListener('keydown', handleKeys, true)
-canvas.addEventListener('keyup', handleKeys, true)
 
-window.requestAnimFrame(game_loop)
+window.requestAnimFrame =
+  requestAnimationFrame || 
+  webkitRequestAnimationFrame || 
+  mozRequestAnimationFrame || 
+  oRequestAnimationFrame || 
+  msRequestAnimationFrame || 
+  (callback, element) -> setTimeout(callback, 1000 / 60)
+
+window.Game = new Game()
