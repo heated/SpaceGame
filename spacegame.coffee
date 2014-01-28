@@ -36,7 +36,7 @@ class BaseEntity
   collides: (entity) ->
     [x1, y1] = @pos
     [x2, y2] = entity.pos
-    min_dist = @size / 2 + entity.size / 2
+    min_dist = (@size + entity.size) / 2
     Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2) < Math.pow(min_dist, 2)
 
   render: ->
@@ -59,7 +59,7 @@ class BaseEntity
       blast = Math.random() * Math.sqrt(power) / 4
       xspeed = Math.cos(angle) * blast
       yspeed = Math.sin(angle) * blast
-      new Particle([pos...], [xspeed, yspeed])
+      new Particle(pos.slice(0), [xspeed, yspeed])
 
 class Particle extends BaseEntity
   @container = []
@@ -75,21 +75,12 @@ class Star extends BaseEntity
   @container = []
   constructor: (xpos) ->
     @pos = [xpos, -1]
-    @vector = [0, 8]
-    @dims = [1, 4]
+    @vector = [0, 6]
+    @dims = [1, 2]
     @mass = 0
     super
 
-class Killable extends BaseEntity
-  constructor: ->
-    @max_health ?= 1
-    @health = @max_health
-    super
-
-  hit: ->
-    @destroy() if --@health <= 0
-
-class Shot extends Killable
+class Shot extends BaseEntity
   act: ->
     @collide_with_enemies()
     @explode(@pos, 1)
@@ -132,7 +123,16 @@ class Enemy_Shot extends Shot
     super
     @explode(@pos, 50)
 
-class Enemy_Ship extends Shot
+class Killable extends BaseEntity
+  constructor: ->
+    @max_health ?= 1
+    @health = @max_health
+    super
+
+  hit: ->
+    @destroy() if --@health <= 0
+
+class Enemy_Ship extends Killable
   @container = []
   constructor: (@pos, @vector, @cooldown) ->
     @dims = [25, 25]
@@ -147,6 +147,17 @@ class Enemy_Ship extends Shot
     @cooldown = 60
     new_shot = new Enemy_Shot(@pos.slice(0), [0, 6])
     new_shot.pos[1] += @size / 2
+
+  collide_with_enemies: ->
+    e = @enemies.length
+    while(e-- > 0)
+      if @collides(@enemies[e])
+        @damage(@enemies[e])
+        @destroy()
+        break
+
+  damage: (entity) ->
+    entity.hit()
 
   render: ->
     @game.dispImg(@game.shipimg, @pos)

@@ -53,7 +53,7 @@
       var min_dist, x1, x2, y1, y2, _ref, _ref1;
       _ref = this.pos, x1 = _ref[0], y1 = _ref[1];
       _ref1 = entity.pos, x2 = _ref1[0], y2 = _ref1[1];
-      min_dist = this.size / 2 + entity.size / 2;
+      min_dist = (this.size + entity.size) / 2;
       return Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2) < Math.pow(min_dist, 2);
     };
 
@@ -118,8 +118,8 @@
 
     function Star(xpos) {
       this.pos = [xpos, -1];
-      this.vector = [0, 8];
-      this.dims = [1, 4];
+      this.vector = [0, 6];
+      this.dims = [1, 2];
       this.mass = 0;
       Star.__super__.constructor.apply(this, arguments);
     }
