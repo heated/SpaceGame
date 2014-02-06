@@ -110,7 +110,7 @@ class Player_Shot extends Shot
 
   inc_score: ->
     @game.killcount++
-    @game.player.mass += 10
+    @game.player.mass += 100
 
 class Enemy_Shot extends Shot
   @container = []
@@ -204,18 +204,18 @@ class Player extends Killable
     right = x + side_length
 
     killcount = @game.killcount
-    if killcount >= 70
+    if killcount >= 60
       @cooldown = 0
       new Player_Shot([x, shoty], Math.random() - .5)
-    else if killcount >= 45
+    else if killcount >= 40
       a = 5
       while(a-- > 0)
         new Player_Shot([x, shoty], a - 2)
-    else if killcount >= 25
+    else if killcount >= 20
       new Player_Shot([left, y], -1)
       new Player_Shot([x, shoty], 0)
       new Player_Shot([right, y], 1)
-    else if killcount >= 10
+    else if killcount >= 5
       new Player_Shot([left, y], 0)
       new Player_Shot([right, y], 0)
     else
